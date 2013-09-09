@@ -460,8 +460,14 @@ public class AdViewController {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
-                getMoPubView().removeAllViews();
-                getMoPubView().addView(view, getAdLayoutParams(view));
+            	
+            	MoPubView view = getMoPubView();
+            	
+            	if(view == null)
+            		return;
+            	
+                view.removeAllViews();
+                view.addView(view, getAdLayoutParams(view));
             }
         });
     }
