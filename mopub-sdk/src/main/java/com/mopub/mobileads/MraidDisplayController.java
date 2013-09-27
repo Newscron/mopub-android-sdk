@@ -1,11 +1,9 @@
 package com.mopub.mobileads;
 
-import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.*;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.StateListDrawable;
@@ -27,8 +25,8 @@ import com.mopub.mobileads.MraidView.PlacementType;
 import com.mopub.mobileads.MraidView.ViewState;
 import com.mopub.mobileads.factories.HttpClientFactory;
 import com.mopub.mobileads.util.HttpResponses;
+import com.mopub.mobileads.util.MraidUtils;
 import com.mopub.mobileads.util.Streams;
-import com.mopub.mobileads.util.VersionCode;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -39,7 +37,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.security.InvalidParameterException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -52,12 +49,16 @@ import static com.mopub.mobileads.MraidCommandStorePicture.MIME_TYPE_HEADER;
 import static com.mopub.mobileads.MraidView.BaseMraidListener;
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_NORMAL;
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_PRESSED;
+import static com.mopub.mobileads.util.MraidUtils.*;
 
 class MraidDisplayController extends MraidAbstractController {
     private static final String LOGTAG = "MraidDisplayController";
     private static final long VIEWABILITY_TIMER_MILLIS = 3000;
     private static final int CLOSE_BUTTON_SIZE_DP = 50;
-    private static final String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ssZZZZZ";
+    private static final String[] DATE_FORMATS = {
+            "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
+            "yyyy-MM-dd'T'HH:mmZZZZZ"
+    };
     private static final int MAX_NUMBER_DAYS_IN_MONTH = 31;
 
     // The view's current state.
@@ -295,16 +296,28 @@ class MraidDisplayController extends MraidAbstractController {
     }
 
     protected void showUserDownloadImageAlert(String imageUrl) {
-        if (getContext() instanceof Activity) {
+        Context context = getContext();
+        if (!isStorePictureSupported(context)) {
+            getMraidView().fireErrorEvent(MRAID_JAVASCRIPT_COMMAND_STORE_PICTURE, "Error downloading file - the device does not have an SD card mounted, or the Android permission is not granted.");
+            Log.d("MoPub", "Error downloading file - the device does not have an SD card mounted, or the Android permission is not granted.");
+            return;
+        }
+
+        if (context instanceof Activity) {
             showUserDialog(imageUrl);
         } else {
-            showUserToast();
+            showUserToast("Downloading image to Picture gallery...");
             downloadImage(imageUrl);
         }
     }
 
-    private void showUserToast() {
-        Toast.makeText(getContext(), "Downloading image to Picture gallery", Toast.LENGTH_SHORT).show();
+    private void showUserToast(final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void downloadImage(final String uriString) {
@@ -320,9 +333,8 @@ class MraidDisplayController extends MraidAbstractController {
 
             @Override
             public void run() {
-                uri = URI.create(uriString);
-
                 try {
+                    uri = URI.create(uriString);
                     HttpClient httpClient = HttpClientFactory.create();
                     HttpGet httpGet = new HttpGet(uri);
 
@@ -343,8 +355,17 @@ class MraidDisplayController extends MraidAbstractController {
 
                     loadPictureIntoGalleryApp(pictureFileFullPath);
                 } catch (Exception exception) {
-                    getMraidView().fireErrorEvent(MRAID_JAVASCRIPT_COMMAND_STORE_PICTURE, "Error downloading and saving image file.");
-                    Log.d("MoPub", "Error downloading and saving image file.");
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            showUserToast("Image failed to download.");
+                            getMraidView().fireErrorEvent(MRAID_JAVASCRIPT_COMMAND_STORE_PICTURE, "Error downloading and saving image file.");
+                            Log.d("MoPub", "Error downloading and saving image file.");
+                        }
+                    });
+                } finally {
+                    Streams.closeStream(pictureInputStream);
+                    Streams.closeStream(pictureOutputStream);
                 }
             }
 
@@ -394,22 +415,23 @@ class MraidDisplayController extends MraidAbstractController {
     }
 
     protected void createCalendarEvent(Map<String, String> params) {
-        if(VersionCode.currentApiLevel().isAtLeast(VersionCode.ICE_CREAM_SANDWICH)) {
+        Context context = getMraidView().getContext();
+        if (MraidUtils.isCalendarAvailable(context)) {
             try {
                 Map<String, Object> calendarParams = translateJSParamsToAndroidCalendarEventMapping(params);
-                Intent intent = new Intent(Intent.ACTION_INSERT).setType("vnd.android.cursor.item/event");
+                Intent intent = new Intent(Intent.ACTION_INSERT).setType(ANDROID_CALENDAR_CONTENT_TYPE);
                 for (String key : calendarParams.keySet()) {
                     Object value = calendarParams.get(key);
                     if (value instanceof Long) {
-                        intent.putExtra(key, ((Long)value).longValue());
+                        intent.putExtra(key, ((Long) value).longValue());
                     } else if (value instanceof Integer) {
-                        intent.putExtra(key, ((Integer)value).intValue());
+                        intent.putExtra(key, ((Integer) value).intValue());
                     } else {
-                        intent.putExtra(key, (String)value);
+                        intent.putExtra(key, (String) value);
                     }
                 }
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getMraidView().getContext().startActivity(intent);
+                context.startActivity(intent);
             } catch (ActivityNotFoundException anfe) {
                 Log.d(LOGTAG, "no calendar app installed");
                 getMraidView().fireErrorEvent(MRAID_JAVASCRIPT_COMMAND_CREATE_CALENDAR_EVENT, "Action is unsupported on this device - no calendar app installed");
@@ -427,24 +449,31 @@ class MraidDisplayController extends MraidAbstractController {
     }
 
     private Map<String, Object> translateJSParamsToAndroidCalendarEventMapping(Map<String, String> params) throws Exception {
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
         Map<String, Object> validatedParamsMapping = new HashMap<String, Object>();
         if (!params.containsKey("description") || !params.containsKey("start")) {
-            throw new InvalidParameterException("missing start and description fields");
+            throw new IllegalArgumentException("Missing start and description fields");
         }
 
         validatedParamsMapping.put(CalendarContract.Events.TITLE, params.get("description"));
-        try {
-            Date date = dateFormat.parse(params.get("start"));
-            validatedParamsMapping.put(CalendarContract.EXTRA_EVENT_BEGIN_TIME, date.getTime());
-            if(params.containsKey("end")) {
-                date = dateFormat.parse(params.get("end"));
-                validatedParamsMapping.put(CalendarContract.EXTRA_EVENT_END_TIME, date.getTime());
+
+        if (params.containsKey("start") && params.get("start") != null) {
+            Date startDateTime = parseDate(params.get("start"));
+            if (startDateTime != null) {
+                validatedParamsMapping.put(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startDateTime.getTime());
+            } else {
+                throw new IllegalArgumentException("Invalid calendar event: start time is malformed. Date format expecting (yyyy-MM-DDTHH:MM:SS-xx:xx) or (yyyy-MM-DDTHH:MM-xx:xx) i.e. 2013-08-14T09:00:01-08:00");
             }
-        } catch (ParseException pe) {
-            throw new InvalidParameterException("Invalid date format. Date format expecting (yyyy-MM-DDTHH:MM:SS-xx:xx) i.e. 2013-08-14T09:00:00-08:00");
-        } catch (NullPointerException npe) {
-            throw new InvalidParameterException("invalid calendar event: start or end is null");
+        } else {
+            throw new IllegalArgumentException("Invalid calendar event: start is null.");
+        }
+
+        if (params.containsKey("end") && params.get("end") != null) {
+            Date endDateTime = parseDate(params.get("end"));
+            if (endDateTime != null) {
+                validatedParamsMapping.put(CalendarContract.EXTRA_EVENT_END_TIME, endDateTime.getTime());
+            } else {
+                throw new IllegalArgumentException("Invalid calendar event: end time is malformed. Date format expecting (yyyy-MM-DDTHH:MM:SS-xx:xx) or (yyyy-MM-DDTHH:MM-xx:xx) i.e. 2013-08-14T09:00:01-08:00");
+            }
         }
 
         if (params.containsKey("location")) {
@@ -467,6 +496,21 @@ class MraidDisplayController extends MraidAbstractController {
         validatedParamsMapping.put(CalendarContract.Events.RRULE, parseRecurrenceRule(params));
 
         return validatedParamsMapping;
+    }
+
+    private Date parseDate(String dateTime) {
+        Date result = null;
+        for (int i=0; i<DATE_FORMATS.length; i++) {
+            try {
+                result = new SimpleDateFormat(DATE_FORMATS[i]).parse(dateTime);
+                if (result != null) {
+                    break;
+                }
+            } catch (ParseException e) {
+                // an exception is okay, just try the next format and find the first one that works
+            }
+        }
+        return result;
     }
 
     private String parseRecurrenceRule(Map<String, String> params) throws IllegalArgumentException {
@@ -513,7 +557,7 @@ class MraidDisplayController extends MraidAbstractController {
         return rule.toString();
     }
 
-    private String translateWeekIntegersToDays(String expression) throws InvalidParameterException{
+    private String translateWeekIntegersToDays(String expression) throws IllegalArgumentException{
         StringBuilder daysResult = new StringBuilder();
         boolean[] daysAlreadyCounted = new boolean[7];
         String[] days = expression.split(",");
@@ -527,13 +571,13 @@ class MraidDisplayController extends MraidAbstractController {
             }
         }
         if (days.length == 0) {
-            throw new InvalidParameterException("must have at least 1 day of the week if specifying repeating weekly");
+            throw new IllegalArgumentException("must have at least 1 day of the week if specifying repeating weekly");
         }
         daysResult.deleteCharAt(daysResult.length()-1);
         return daysResult.toString();
     }
 
-    private String translateMonthIntegersToDays(String expression) throws InvalidParameterException {
+    private String translateMonthIntegersToDays(String expression) throws IllegalArgumentException {
         StringBuilder daysResult = new StringBuilder();
         boolean[] daysAlreadyCounted = new boolean[2*MAX_NUMBER_DAYS_IN_MONTH +1]; //for -31 to 31
         String[] days = expression.split(",");
@@ -546,14 +590,14 @@ class MraidDisplayController extends MraidAbstractController {
             }
         }
         if (days.length == 0) {
-            throw new InvalidParameterException("must have at least 1 day of the month if specifying repeating weekly");
+            throw new IllegalArgumentException("must have at least 1 day of the month if specifying repeating weekly");
         }
-        daysResult.deleteCharAt(daysResult.length()-1);
+        daysResult.deleteCharAt(daysResult.length() - 1);
         return daysResult.toString();
     }
 
-    private String dayNumberToDayOfWeekString(int number) throws InvalidParameterException {
-        String dayOfWeek = null;
+    private String dayNumberToDayOfWeekString(int number) throws IllegalArgumentException {
+        String dayOfWeek;
         switch(number) {
             case 0: dayOfWeek="SU"; break;
             case 1: dayOfWeek="MO"; break;
@@ -562,18 +606,18 @@ class MraidDisplayController extends MraidAbstractController {
             case 4: dayOfWeek="TH"; break;
             case 5: dayOfWeek="FR"; break;
             case 6: dayOfWeek="SA"; break;
-            default: throw new InvalidParameterException("invalid day of week " + number);
+            default: throw new IllegalArgumentException("invalid day of week " + number);
         }
         return dayOfWeek;
     }
 
-    private String dayNumberToDayOfMonthString(int number) throws InvalidParameterException {
-        String dayOfMonth = null;
+    private String dayNumberToDayOfMonthString(int number) throws IllegalArgumentException {
+        String dayOfMonth;
         // https://android.googlesource.com/platform/frameworks/opt/calendar/+/504844526f1b7afec048c6d2976ffb332670d5ba/src/com/android/calendarcommon2/EventRecurrence.java
-        if(number != 0 && number >= -MAX_NUMBER_DAYS_IN_MONTH && number <= MAX_NUMBER_DAYS_IN_MONTH) {
+        if (number != 0 && number >= -MAX_NUMBER_DAYS_IN_MONTH && number <= MAX_NUMBER_DAYS_IN_MONTH) {
             dayOfMonth = "" + number;
         } else {
-            throw new InvalidParameterException("invalid day of month " + number);
+            throw new IllegalArgumentException("invalid day of month " + number);
         }
         return dayOfMonth;
     }
@@ -695,33 +739,14 @@ class MraidDisplayController extends MraidAbstractController {
     }
 
     protected void initializeSupportedFunctionsProperty() {
+        Context context = getContext();
         getMraidView().fireChangeEventForProperty(
                 new MraidSupportsProperty()
-                    .withSms(isSmsSupported())
-                    .withTel(isTelSupported())
-                    .withCalendar(true)
-                    .withInlineVideo(true)
-                    .withStorePicture(true));
-    }
-
-    private boolean isSmsSupported() {
-        return hasPhone() && hasSmsPermission();
-    }
-
-    private boolean hasSmsPermission() {
-        return getContext().checkCallingOrSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private boolean isTelSupported() {
-        return hasPhone() && hasCallPermission();
-    }
-
-    private boolean hasCallPermission() {
-        return getContext().checkCallingOrSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private boolean hasPhone() {
-        return getContext().getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY);
+                        .withTel(isTelAvailable(context))
+                        .withSms(isSmsAvailable(context))
+                        .withCalendar(isCalendarAvailable(context))
+                        .withInlineVideo(isInlineVideoAvailable(context))
+                        .withStorePicture(isStorePictureSupported(context)));
     }
 
     private File getPictureStoragePath() {
