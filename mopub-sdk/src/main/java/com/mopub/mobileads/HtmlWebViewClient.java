@@ -38,6 +38,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -282,7 +283,9 @@ class HtmlWebViewClient extends WebViewClient {
 
     private boolean executeIntent(Context context, Intent intent, String errorMessage) {
         try {
-            context.startActivity(intent);
+            //context.startActivity(intent);
+            LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+            
         } catch (Exception e) {
             Log.d("MoPub", (errorMessage != null)
                     ? errorMessage
