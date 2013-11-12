@@ -37,14 +37,18 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.v4.content.LocalBroadcastManager;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
+
 import com.mopub.mobileads.util.Dips;
 
 import static android.view.View.INVISIBLE;
@@ -82,6 +86,12 @@ public abstract class BaseInterstitialActivity extends Activity {
     private int mButtonSize;
     private int mButtonPadding;
 
+
+    private final static int SECONDS_TO_WAIT = 7;
+    private TextView mSecondsToWaitView ;
+    
+    private Handler mCountDownHandler;
+    
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -100,11 +110,43 @@ public abstract class BaseInterstitialActivity extends Activity {
         mLayout.addView(getAdView(), adViewLayout);
         setContentView(mLayout);
 
+        mCountDownHandler = new Handler();
+        
+        createSecondsToWaitLabel();
         createInterstitialCloseButton();
+        countDown(SECONDS_TO_WAIT);
     }
 
+   
+    private void countDown (final int secondsToWait ){
+    	
+    	if(secondsToWait <= 0){
+    		finish();
+    	}
+    	String format = "Newscron will appear in %d seconds";
+    	String message = String.format(format, secondsToWait);
+    	mSecondsToWaitView.setText(message);
+    	
+    	mCountDownHandler.postDelayed( new Runnable(){
+
+			@Override
+			public void run() {
+				countDown(secondsToWait  - 1);
+			}
+    		
+    	}, 1000);
+    	
+    	
+    }
+    
+    protected void cancelCountDown(){
+    	mSecondsToWaitView.setVisibility(View.GONE);
+    	mCountDownHandler.removeCallbacksAndMessages(null);
+    }
+    
     @Override
     protected void onDestroy() {
+    	mCountDownHandler.removeCallbacksAndMessages(null);
         broadcastInterstitialAction(ACTION_INTERSTITIAL_DISMISS);
         mLayout.removeAllViews();
         super.onDestroy();
@@ -144,6 +186,17 @@ public abstract class BaseInterstitialActivity extends Activity {
         return intentFilter;
     }
 
+    private void createSecondsToWaitLabel(){
+    	
+    	mSecondsToWaitView = new TextView(this);
+    	 RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(LayoutParams.WRAP_CONTENT, 
+    			 LayoutParams.WRAP_CONTENT);
+         buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+         buttonLayout.setMargins(mButtonPadding, 0, mButtonPadding, 0);
+         mLayout.addView(mSecondsToWaitView, buttonLayout);
+    	
+    }
+    
     private void createInterstitialCloseButton() {
         mCloseButton = new ImageButton(this);
         StateListDrawable states = new StateListDrawable();
@@ -161,5 +214,9 @@ public abstract class BaseInterstitialActivity extends Activity {
         buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
         buttonLayout.setMargins(mButtonPadding, 0, mButtonPadding, 0);
         mLayout.addView(mCloseButton, buttonLayout);
+        
+        
+        
+        
     }
 }
