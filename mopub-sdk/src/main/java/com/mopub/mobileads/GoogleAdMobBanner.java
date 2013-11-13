@@ -106,6 +106,9 @@ class GoogleAdMobBanner extends CustomEventBanner implements AdListener {
 
     @Override
     protected void onInvalidate() {
+    	if(mAdMobView == null){
+    		return ;
+    	}
         mAdMobView.setAdListener(null);
         Views.removeFromParent(mAdMobView);
         mAdMobView.destroy();
