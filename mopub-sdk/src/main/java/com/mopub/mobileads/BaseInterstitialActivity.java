@@ -33,6 +33,8 @@
 package com.mopub.mobileads;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.drawable.StateListDrawable;
@@ -62,6 +64,10 @@ public abstract class BaseInterstitialActivity extends Activity {
     public static final String ACTION_INTERSTITIAL_SHOW = "com.mopub.action.interstitial.show";
     public static final String ACTION_INTERSTITIAL_DISMISS = "com.mopub.action.interstitial.dismiss";
     public static final String ACTION_INTERSTITIAL_CLICK = "com.mopub.action.interstitial.click";
+    
+    public static final String ACTION_INTERSTITIAL_FORCE_FINISH = "com.mopub.action.interstitial.force.finish";
+    
+    
     public static final IntentFilter HTML_INTERSTITIAL_INTENT_FILTER = createHtmlInterstitialIntentFilter();
 
     enum JavaScriptWebViewCallbacks {
@@ -91,6 +97,7 @@ public abstract class BaseInterstitialActivity extends Activity {
     private TextView mSecondsToWaitView ;
     
     private Handler mCountDownHandler;
+    private BroadcastReceiver mFinishReceiver;
     
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -115,6 +122,20 @@ public abstract class BaseInterstitialActivity extends Activity {
         createSecondsToWaitLabel();
         createInterstitialCloseButton();
         countDown(SECONDS_TO_WAIT);
+        
+        mFinishReceiver = new BroadcastReceiver(){
+
+			@Override
+			public void onReceive(Context context, Intent intent) {
+				finish();
+			}    	
+        };
+        
+        IntentFilter filter = new IntentFilter(ACTION_INTERSTITIAL_FORCE_FINISH);
+        
+        LocalBroadcastManager
+        .getInstance(this)
+        .registerReceiver(mFinishReceiver, filter);
     }
 
    
@@ -146,6 +167,11 @@ public abstract class BaseInterstitialActivity extends Activity {
     
     @Override
     protected void onDestroy() {
+    	
+        LocalBroadcastManager
+        .getInstance(this)
+        .unregisterReceiver(mFinishReceiver);
+        
     	mCountDownHandler.removeCallbacksAndMessages(null);
         broadcastInterstitialAction(ACTION_INTERSTITIAL_DISMISS);
         mLayout.removeAllViews();
@@ -183,6 +209,7 @@ public abstract class BaseInterstitialActivity extends Activity {
         intentFilter.addAction(ACTION_INTERSTITIAL_SHOW);
         intentFilter.addAction(ACTION_INTERSTITIAL_DISMISS);
         intentFilter.addAction(ACTION_INTERSTITIAL_CLICK);
+        intentFilter.addAction(ACTION_INTERSTITIAL_FORCE_FINISH);
         return intentFilter;
     }
 
