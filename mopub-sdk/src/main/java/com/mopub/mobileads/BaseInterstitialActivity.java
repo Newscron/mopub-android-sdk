@@ -33,10 +33,13 @@
 package com.mopub.mobileads;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.v4.content.LocalBroadcastManager;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -45,6 +48,8 @@ import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
+
 import com.mopub.mobileads.util.Dips;
 
 import static android.view.View.INVISIBLE;
@@ -54,110 +59,172 @@ import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_N
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_PRESSED;
 
 abstract class BaseInterstitialActivity extends Activity {
-    public static final String ACTION_INTERSTITIAL_FAIL = "com.mopub.action.interstitial.fail";
-    public static final String ACTION_INTERSTITIAL_SHOW = "com.mopub.action.interstitial.show";
-    public static final String ACTION_INTERSTITIAL_DISMISS = "com.mopub.action.interstitial.dismiss";
-    public static final String ACTION_INTERSTITIAL_CLICK = "com.mopub.action.interstitial.click";
-    public static final IntentFilter HTML_INTERSTITIAL_INTENT_FILTER = createHtmlInterstitialIntentFilter();
+	public static final String ACTION_INTERSTITIAL_FAIL = "com.mopub.action.interstitial.fail";
+	public static final String ACTION_INTERSTITIAL_SHOW = "com.mopub.action.interstitial.show";
+	public static final String ACTION_INTERSTITIAL_DISMISS = "com.mopub.action.interstitial.dismiss";
+	public static final String ACTION_INTERSTITIAL_CLICK = "com.mopub.action.interstitial.click";
 
-    enum JavaScriptWebViewCallbacks {
-        WEB_VIEW_DID_APPEAR("javascript:webviewDidAppear();"),
-        WEB_VIEW_DID_CLOSE("javascript:webviewDidClose();");
+	public static final String ACTION_INTERSTITIAL_FORCE_FINISH = "com.mopub.action.interstitial.force.finish";
 
-        private String mUrl;
-        private JavaScriptWebViewCallbacks(String url) {
-            mUrl = url;
-        }
+	public static final IntentFilter HTML_INTERSTITIAL_INTENT_FILTER = createHtmlInterstitialIntentFilter();
 
-        protected String getUrl() {
-            return mUrl;
-        }
-    }
+	enum JavaScriptWebViewCallbacks {
+		WEB_VIEW_DID_APPEAR("javascript:webviewDidAppear();"), WEB_VIEW_DID_CLOSE(
+				"javascript:webviewDidClose();");
 
-    private static final float CLOSE_BUTTON_SIZE = 50f;
-    private static final float CLOSE_BUTTON_PADDING = 8f;
+		private String mUrl;
 
-    private ImageView mCloseButton;
-    private RelativeLayout mLayout;
-    private int mButtonSize;
-    private int mButtonPadding;
+		private JavaScriptWebViewCallbacks(String url) {
+			mUrl = url;
+		}
 
-    public abstract View getAdView();
+		protected String getUrl() {
+			return mUrl;
+		}
+	}
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+	private static final float CLOSE_BUTTON_SIZE = 50f;
+	private static final float CLOSE_BUTTON_PADDING = 8f;
 
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+	private ImageView mCloseButton;
+	private RelativeLayout mLayout;
+	private int mButtonSize;
+	private int mButtonPadding;
 
-        mButtonSize = Dips.asIntPixels(CLOSE_BUTTON_SIZE, this);
-        mButtonPadding = Dips.asIntPixels(CLOSE_BUTTON_PADDING, this);
+	public abstract View getAdView();
 
-        mLayout = new RelativeLayout(this);
-        final RelativeLayout.LayoutParams adViewLayout = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.FILL_PARENT, RelativeLayout.LayoutParams.WRAP_CONTENT);
-        adViewLayout.addRule(RelativeLayout.CENTER_IN_PARENT);
-        mLayout.addView(getAdView(), adViewLayout);
-        setContentView(mLayout);
+	private final static int SECONDS_TO_WAIT = 7;
+	private TextView mSecondsToWaitView;
 
-        createInterstitialCloseButton();
-    }
+	private Handler mCountDownHandler;
+	private BroadcastReceiver mFinishReceiver;
 
-    @Override
-    protected void onDestroy() {
-        mLayout.removeAllViews();
-        super.onDestroy();
-    }
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
 
-    protected void showInterstitialCloseButton() {
-        mCloseButton.setVisibility(VISIBLE);
-    }
+		requestWindowFeature(Window.FEATURE_NO_TITLE);
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-    protected void hideInterstitialCloseButton() {
-        mCloseButton.setVisibility(INVISIBLE);
-    }
+		mButtonSize = Dips.asIntPixels(CLOSE_BUTTON_SIZE, this);
+		mButtonPadding = Dips.asIntPixels(CLOSE_BUTTON_PADDING, this);
 
-    protected void broadcastInterstitialAction(String action) {
-        Intent intent = new Intent(action);
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-    }
+		mLayout = new RelativeLayout(this);
+		final RelativeLayout.LayoutParams adViewLayout = new RelativeLayout.LayoutParams(
+				RelativeLayout.LayoutParams.FILL_PARENT,
+				RelativeLayout.LayoutParams.WRAP_CONTENT);
+		adViewLayout.addRule(RelativeLayout.CENTER_IN_PARENT);
+		mLayout.addView(getAdView(), adViewLayout);
+		setContentView(mLayout);
 
-    protected AdConfiguration getAdConfiguration() {
-        AdConfiguration adConfiguration;
-        try {
-            adConfiguration = (AdConfiguration) getIntent().getSerializableExtra(AD_CONFIGURATION_KEY);
-        } catch (ClassCastException e) {
-            adConfiguration = null;
-        }
-        return adConfiguration;
-    }
+		createInterstitialCloseButton();
 
-    private static IntentFilter createHtmlInterstitialIntentFilter() {
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(ACTION_INTERSTITIAL_FAIL);
-        intentFilter.addAction(ACTION_INTERSTITIAL_SHOW);
-        intentFilter.addAction(ACTION_INTERSTITIAL_DISMISS);
-        intentFilter.addAction(ACTION_INTERSTITIAL_CLICK);
-        return intentFilter;
-    }
+		countDown(SECONDS_TO_WAIT);
 
-    private void createInterstitialCloseButton() {
-        mCloseButton = new ImageButton(this);
-        StateListDrawable states = new StateListDrawable();
-        states.addState(new int[] {-android.R.attr.state_pressed}, INTERSTITIAL_CLOSE_BUTTON_NORMAL.decodeImage(this));
-        states.addState(new int[] {android.R.attr.state_pressed}, INTERSTITIAL_CLOSE_BUTTON_PRESSED.decodeImage(this));
-        mCloseButton.setImageDrawable(states);
-        mCloseButton.setBackgroundDrawable(null);
-        mCloseButton.setOnClickListener(new OnClickListener() {
-            public void onClick(View v) {
-                finish();
-            }
-        });
+		mFinishReceiver = new BroadcastReceiver() {
 
-        RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(mButtonSize, mButtonSize);
-        buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
-        buttonLayout.setMargins(mButtonPadding, 0, mButtonPadding, 0);
-        mLayout.addView(mCloseButton, buttonLayout);
-    }
+			@Override
+			public void onReceive(Context context, Intent intent) {
+				finish();
+			}
+		};
+
+		IntentFilter filter = new IntentFilter(ACTION_INTERSTITIAL_FORCE_FINISH);
+
+		LocalBroadcastManager.getInstance(this).registerReceiver(
+				mFinishReceiver, filter);
+	}
+
+	private void countDown(final int secondsToWait) {
+
+		if (secondsToWait <= 0) {
+			finish();
+		}
+		String format = "Newscron will appear in %d seconds";
+		String message = String.format(format, secondsToWait);
+		mSecondsToWaitView.setText(message);
+
+		mCountDownHandler.postDelayed(new Runnable() {
+
+			@Override
+			public void run() {
+				countDown(secondsToWait - 1);
+			}
+
+		}, 1000);
+
+	}
+
+	protected void cancelCountDown() {
+		mSecondsToWaitView.setVisibility(View.GONE);
+		mCountDownHandler.removeCallbacksAndMessages(null);
+	}
+
+	@Override
+	protected void onDestroy() {
+
+		LocalBroadcastManager.getInstance(this).unregisterReceiver(
+				mFinishReceiver);
+
+		mCountDownHandler.removeCallbacksAndMessages(null);
+		broadcastInterstitialAction(ACTION_INTERSTITIAL_DISMISS);
+		mLayout.removeAllViews();
+		super.onDestroy();
+	}
+
+	protected void showInterstitialCloseButton() {
+		mCloseButton.setVisibility(VISIBLE);
+	}
+
+	protected void hideInterstitialCloseButton() {
+		mCloseButton.setVisibility(INVISIBLE);
+	}
+
+	protected void broadcastInterstitialAction(String action) {
+		Intent intent = new Intent(action);
+		LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+	}
+
+	protected AdConfiguration getAdConfiguration() {
+		AdConfiguration adConfiguration;
+		try {
+			adConfiguration = (AdConfiguration) getIntent()
+					.getSerializableExtra(AD_CONFIGURATION_KEY);
+		} catch (ClassCastException e) {
+			adConfiguration = null;
+		}
+		return adConfiguration;
+	}
+
+	private static IntentFilter createHtmlInterstitialIntentFilter() {
+		IntentFilter intentFilter = new IntentFilter();
+		intentFilter.addAction(ACTION_INTERSTITIAL_FAIL);
+		intentFilter.addAction(ACTION_INTERSTITIAL_SHOW);
+		intentFilter.addAction(ACTION_INTERSTITIAL_DISMISS);
+		intentFilter.addAction(ACTION_INTERSTITIAL_CLICK);
+		intentFilter.addAction(ACTION_INTERSTITIAL_FORCE_FINISH);
+		return intentFilter;
+	}
+
+	private void createInterstitialCloseButton() {
+		mCloseButton = new ImageButton(this);
+		StateListDrawable states = new StateListDrawable();
+		states.addState(new int[] { -android.R.attr.state_pressed },
+				INTERSTITIAL_CLOSE_BUTTON_NORMAL.decodeImage(this));
+		states.addState(new int[] { android.R.attr.state_pressed },
+				INTERSTITIAL_CLOSE_BUTTON_PRESSED.decodeImage(this));
+		mCloseButton.setImageDrawable(states);
+		mCloseButton.setBackgroundDrawable(null);
+		mCloseButton.setOnClickListener(new OnClickListener() {
+			public void onClick(View v) {
+				finish();
+			}
+		});
+
+		RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(
+				mButtonSize, mButtonSize);
+		buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+		buttonLayout.setMargins(mButtonPadding, 0, mButtonPadding, 0);
+		mLayout.addView(mCloseButton, buttonLayout);
+	}
 }
