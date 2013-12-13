@@ -37,6 +37,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -216,10 +217,11 @@ public abstract class BaseInterstitialActivity extends Activity {
     private void createSecondsToWaitLabel(){
     	
     	mSecondsToWaitView = new TextView(this);
-    	 RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(LayoutParams.WRAP_CONTENT, 
+    	 RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(LayoutParams.MATCH_PARENT, 
     			 LayoutParams.WRAP_CONTENT);
+    	 mSecondsToWaitView.setBackgroundColor(Color.BLACK);
          buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-         buttonLayout.setMargins(mButtonPadding, 0, mButtonPadding, 0);
+         mSecondsToWaitView.setPadding(mButtonPadding, 0, mButtonPadding, 0);
          mLayout.addView(mSecondsToWaitView, buttonLayout);
     	
     }
