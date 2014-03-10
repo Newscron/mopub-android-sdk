@@ -33,25 +33,18 @@
 package com.mopub.mobileads;
 
 import android.app.Activity;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Color;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
-import android.os.Handler;
 import android.support.v4.content.LocalBroadcastManager;
 import android.view.View;
 import android.view.View.OnClickListener;
-import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
-import android.widget.TextView;
-
 import com.mopub.mobileads.util.Dips;
 
 import static android.view.View.INVISIBLE;
@@ -60,15 +53,11 @@ import static com.mopub.mobileads.AdFetcher.AD_CONFIGURATION_KEY;
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_NORMAL;
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_PRESSED;
 
-public abstract class BaseInterstitialActivity extends Activity {
+abstract class BaseInterstitialActivity extends Activity {
     public static final String ACTION_INTERSTITIAL_FAIL = "com.mopub.action.interstitial.fail";
     public static final String ACTION_INTERSTITIAL_SHOW = "com.mopub.action.interstitial.show";
     public static final String ACTION_INTERSTITIAL_DISMISS = "com.mopub.action.interstitial.dismiss";
     public static final String ACTION_INTERSTITIAL_CLICK = "com.mopub.action.interstitial.click";
-    
-    public static final String ACTION_INTERSTITIAL_FORCE_FINISH = "com.mopub.action.interstitial.force.finish";
-    
-    
     public static final IntentFilter HTML_INTERSTITIAL_INTENT_FILTER = createHtmlInterstitialIntentFilter();
 
     enum JavaScriptWebViewCallbacks {
@@ -93,17 +82,11 @@ public abstract class BaseInterstitialActivity extends Activity {
     private int mButtonSize;
     private int mButtonPadding;
 
+    public abstract View getAdView();
 
-    private final static int SECONDS_TO_WAIT = 7;
-    private TextView mSecondsToWaitView ;
-    
-    private Handler mCountDownHandler;
-    private BroadcastReceiver mFinishReceiver;
-    
     @Override
-    public void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        broadcastInterstitialAction(ACTION_INTERSTITIAL_SHOW);
 
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -118,68 +101,14 @@ public abstract class BaseInterstitialActivity extends Activity {
         mLayout.addView(getAdView(), adViewLayout);
         setContentView(mLayout);
 
-        mCountDownHandler = new Handler();
-        
-        createSecondsToWaitLabel();
         createInterstitialCloseButton();
-        countDown(SECONDS_TO_WAIT);
-        
-        mFinishReceiver = new BroadcastReceiver(){
-
-			@Override
-			public void onReceive(Context context, Intent intent) {
-				finish();
-			}    	
-        };
-        
-        IntentFilter filter = new IntentFilter(ACTION_INTERSTITIAL_FORCE_FINISH);
-        
-        LocalBroadcastManager
-        .getInstance(this)
-        .registerReceiver(mFinishReceiver, filter);
     }
 
-   
-    private void countDown (final int secondsToWait ){
-    	
-    	if(secondsToWait <= 0){
-    		finish();
-    	}
-    	String format = "Newscron will appear in %d seconds";
-    	String message = String.format(format, secondsToWait);
-    	mSecondsToWaitView.setText(message);
-    	
-    	mCountDownHandler.postDelayed( new Runnable(){
-
-			@Override
-			public void run() {
-				countDown(secondsToWait  - 1);
-			}
-    		
-    	}, 1000);
-    	
-    	
-    }
-    
-    protected void cancelCountDown(){
-    	mSecondsToWaitView.setVisibility(View.GONE);
-    	mCountDownHandler.removeCallbacksAndMessages(null);
-    }
-    
     @Override
     protected void onDestroy() {
-    	
-        LocalBroadcastManager
-        .getInstance(this)
-        .unregisterReceiver(mFinishReceiver);
-        
-    	mCountDownHandler.removeCallbacksAndMessages(null);
-        broadcastInterstitialAction(ACTION_INTERSTITIAL_DISMISS);
         mLayout.removeAllViews();
         super.onDestroy();
     }
-
-    public abstract View getAdView();
 
     protected void showInterstitialCloseButton() {
         mCloseButton.setVisibility(VISIBLE);
@@ -210,22 +139,9 @@ public abstract class BaseInterstitialActivity extends Activity {
         intentFilter.addAction(ACTION_INTERSTITIAL_SHOW);
         intentFilter.addAction(ACTION_INTERSTITIAL_DISMISS);
         intentFilter.addAction(ACTION_INTERSTITIAL_CLICK);
-        intentFilter.addAction(ACTION_INTERSTITIAL_FORCE_FINISH);
         return intentFilter;
     }
 
-    private void createSecondsToWaitLabel(){
-    	
-    	mSecondsToWaitView = new TextView(this);
-    	 RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(LayoutParams.MATCH_PARENT, 
-    			 LayoutParams.WRAP_CONTENT);
-    	 mSecondsToWaitView.setBackgroundColor(Color.BLACK);
-         buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-         mSecondsToWaitView.setPadding(mButtonPadding, 0, mButtonPadding, 0);
-         mLayout.addView(mSecondsToWaitView, buttonLayout);
-    	
-    }
-    
     private void createInterstitialCloseButton() {
         mCloseButton = new ImageButton(this);
         StateListDrawable states = new StateListDrawable();
@@ -243,9 +159,5 @@ public abstract class BaseInterstitialActivity extends Activity {
         buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
         buttonLayout.setMargins(mButtonPadding, 0, mButtonPadding, 0);
         mLayout.addView(mCloseButton, buttonLayout);
-        
-        
-        
-        
     }
 }
