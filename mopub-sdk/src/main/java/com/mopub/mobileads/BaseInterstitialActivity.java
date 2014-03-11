@@ -58,7 +58,7 @@ import static com.mopub.mobileads.AdFetcher.AD_CONFIGURATION_KEY;
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_NORMAL;
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_PRESSED;
 
-abstract class BaseInterstitialActivity extends Activity {
+public abstract class BaseInterstitialActivity extends Activity {
 	public static final String ACTION_INTERSTITIAL_FAIL = "com.mopub.action.interstitial.fail";
 	public static final String ACTION_INTERSTITIAL_SHOW = "com.mopub.action.interstitial.show";
 	public static final String ACTION_INTERSTITIAL_DISMISS = "com.mopub.action.interstitial.dismiss";
