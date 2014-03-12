@@ -37,12 +37,14 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.v4.content.LocalBroadcastManager;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ImageButton;
@@ -59,6 +61,7 @@ import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_N
 import static com.mopub.mobileads.resource.Drawables.INTERSTITIAL_CLOSE_BUTTON_PRESSED;
 
 public abstract class BaseInterstitialActivity extends Activity {
+
 	public static final String ACTION_INTERSTITIAL_FAIL = "com.mopub.action.interstitial.fail";
 	public static final String ACTION_INTERSTITIAL_SHOW = "com.mopub.action.interstitial.show";
 	public static final String ACTION_INTERSTITIAL_DISMISS = "com.mopub.action.interstitial.dismiss";
@@ -117,15 +120,20 @@ public abstract class BaseInterstitialActivity extends Activity {
 		mLayout.addView(getAdView(), adViewLayout);
 		setContentView(mLayout);
 
+		mCountDownHandler = new Handler();
+		
+		createSecondsToWaitLabel();
 		createInterstitialCloseButton();
 
 		countDown(SECONDS_TO_WAIT);
 
 		mFinishReceiver = new BroadcastReceiver() {
 
+
 			@Override
 			public void onReceive(Context context, Intent intent) {
 				finish();
+
 			}
 		};
 
@@ -137,6 +145,7 @@ public abstract class BaseInterstitialActivity extends Activity {
 
 	private void countDown(final int secondsToWait) {
 
+		
 		if (secondsToWait <= 0) {
 			finish();
 		}
@@ -205,6 +214,19 @@ public abstract class BaseInterstitialActivity extends Activity {
 		intentFilter.addAction(ACTION_INTERSTITIAL_FORCE_FINISH);
 		return intentFilter;
 	}
+	
+	
+	 private void createSecondsToWaitLabel(){
+	    	
+	    	mSecondsToWaitView = new TextView(this);
+	    	 RelativeLayout.LayoutParams buttonLayout = new RelativeLayout.LayoutParams(LayoutParams.MATCH_PARENT, 
+	    			 LayoutParams.WRAP_CONTENT);
+	    	 mSecondsToWaitView.setBackgroundColor(Color.BLACK);
+	         buttonLayout.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+	         mSecondsToWaitView.setPadding(mButtonPadding, 0, mButtonPadding, 0);
+	         mLayout.addView(mSecondsToWaitView, buttonLayout);
+	    	
+	    }
 
 	private void createInterstitialCloseButton() {
 		mCloseButton = new ImageButton(this);
@@ -228,3 +250,4 @@ public abstract class BaseInterstitialActivity extends Activity {
 		mLayout.addView(mCloseButton, buttonLayout);
 	}
 }
+

@@ -39,32 +39,29 @@ import com.millennialmedia.android.*;
 
 import java.util.Map;
 
+import static com.mopub.mobileads.MoPubErrorCode.NETWORK_INVALID_STATE;
+import static com.mopub.mobileads.MoPubErrorCode.NETWORK_NO_FILL;
+
 /**
  * Compatible with version 5.1.0 of the Millennial Media SDK.
  */
 
-class MillennialBanner extends CustomEventBanner {
-    private MMAdView mMillennialAdView;
-    private CustomEventBannerListener mBannerListener;
+class MillennialInterstitial extends CustomEventInterstitial {
+    private MMInterstitial mMillennialInterstitial;
+    private CustomEventInterstitialListener mInterstitialListener;
     public static final String APID_KEY = "adUnitID";
-    public static final String AD_WIDTH_KEY = "adWidth";
-    public static final String AD_HEIGHT_KEY = "adHeight";
     private MillennialBroadcastReceiver mBroadcastReceiver;
 
     @Override
-    protected void loadBanner(Context context, CustomEventBannerListener customEventBannerListener,
-                              Map<String, Object> localExtras, Map<String, String> serverExtras) {
-        mBannerListener = customEventBannerListener;
+    protected void loadInterstitial(Context context, CustomEventInterstitialListener customEventInterstitialListener,
+                                    Map<String, Object> localExtras, Map<String, String> serverExtras) {
+        mInterstitialListener = customEventInterstitialListener;
 
         String apid;
-        int width;
-        int height;
         if (extrasAreValid(serverExtras)) {
             apid = serverExtras.get(APID_KEY);
-            width = Integer.parseInt(serverExtras.get(AD_WIDTH_KEY));
-            height = Integer.parseInt(serverExtras.get(AD_HEIGHT_KEY));
         } else {
-            mBannerListener.onBannerFailed(MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
+            mInterstitialListener.onInterstitialFailed(MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
             return;
         }
 
@@ -74,61 +71,81 @@ class MillennialBanner extends CustomEventBanner {
         mBroadcastReceiver = new MillennialBroadcastReceiver();
         mBroadcastReceiver.register(context);
 
-        mMillennialAdView = new MMAdView(context);
-        mMillennialAdView.setApid(apid);
-        mMillennialAdView.setWidth(width);
-        mMillennialAdView.setHeight(height);
-
         Location location = (Location) localExtras.get("location");
         if (location != null) MMRequest.setUserLocation(location);
 
-        mMillennialAdView.setMMRequest(new MMRequest());
-        mMillennialAdView.setId(MMSDK.getDefaultAdId());
-        AdViewController.setShouldHonorServerDimensions(mMillennialAdView);
-        mMillennialAdView.getAd();
+        mMillennialInterstitial = new MMInterstitial(context);
+        if (mMillennialInterstitial.isAdAvailable()) {
+            Log.d("MoPub", "Millennial interstitial ad already loaded.");
+            mInterstitialListener.onInterstitialLoaded();
+        } else {
+            mMillennialInterstitial.setMMRequest(new MMRequest());
+            mMillennialInterstitial.setApid(apid);
+            mMillennialInterstitial.fetch();
+        }
     }
 
-    private boolean extrasAreValid(Map<String, String> serverExtras) {
-        try {
-            Integer.parseInt(serverExtras.get(AD_WIDTH_KEY));
-            Integer.parseInt(serverExtras.get(AD_HEIGHT_KEY));
-        } catch (NumberFormatException e) {
-            return false;
+    @Override
+    protected void showInterstitial() {
+        if (mMillennialInterstitial.isAdAvailable()) {
+            mMillennialInterstitial.display();
+        } else {
+            Log.d("MoPub", "Tried to show a Millennial interstitial ad before it finished loading. Please try again.");
         }
-
-        return serverExtras.containsKey(APID_KEY);
     }
 
     @Override
     protected void onInvalidate() {
-        mMillennialAdView.setListener(null);
+        mMillennialInterstitial.setListener(null);
         mBroadcastReceiver.unregister();
+    }
+
+    private boolean extrasAreValid(Map<String, String> serverExtras) {
+        return serverExtras.containsKey(APID_KEY);
     }
 
     class MillennialBroadcastReceiver extends MMBroadcastReceiver {
         private Context mContext;
 
         @Override
-        public void getAdSuccess(MMAd ad) {
-            super.getAdSuccess(ad);
-            Log.d("MoPub", "Millennial banner ad loaded successfully. Showing ad...");
-            mBannerListener.onBannerLoaded(mMillennialAdView);
+        public void fetchFinishedCaching(MMAd ad) {
+            super.fetchFinishedCaching(ad);
+            fetchFinished(NETWORK_INVALID_STATE);
         }
 
         @Override
         public void getAdFailure(MMAd ad) {
             super.getAdFailure(ad);
-            Log.d("MoPub", "Millennial banner ad failed to load.");
-            mBannerListener.onBannerFailed(MoPubErrorCode.NETWORK_NO_FILL);
+            Log.d("MoPub", "Millennial interstitial ad failed to load.");
+            mInterstitialListener.onInterstitialFailed(NETWORK_NO_FILL);
         }
 
         @Override
         public void intentStarted(MMAd ad, String intent) {
             super.intentStarted(ad, intent);
-            Log.d("MoPub", "Millennial banner ad clicked.");
-            mBannerListener.onBannerClicked();
+            Log.d("MoPub", "Millennial interstitial ad clicked.");
+            mInterstitialListener.onInterstitialClicked();
         }
 
+        @Override
+        public void fetchFailure(MMAd ad) {
+            super.fetchFailure(ad);
+            fetchFinished(NETWORK_NO_FILL);
+        }
+
+        @Override
+        public void displayStarted(MMAd ad) {
+            super.displayStarted(ad);
+            Log.d("MoPub", "Showing Millennial interstitial ad.");
+            mInterstitialListener.onInterstitialShown();
+        }
+
+        @Override
+        public void overlayClosed(MMAd ad) {
+            super.overlayClosed(ad);
+            Log.d("MoPub", "Millennial interstitial ad dismissed.");
+            mInterstitialListener.onInterstitialDismissed();
+        }
 
         void register(Context context) {
             mContext = context;
@@ -144,10 +161,15 @@ class MillennialBanner extends CustomEventBanner {
                 mContext = null;
             }
         }
-    }
 
-    @Deprecated
-    MMAdView getMMAdView() {
-        return mMillennialAdView;
+        private void fetchFinished(MoPubErrorCode errorToReport) {
+            if (mMillennialInterstitial.isAdAvailable()) {
+                Log.d("MoPub", "Millennial interstitial ad loaded successfully.");
+                mInterstitialListener.onInterstitialLoaded();
+            } else {
+                Log.d("MoPub", "Millennial interstitial ad failed to load.");
+                mInterstitialListener.onInterstitialFailed(errorToReport);
+            }
+        }
     }
 }

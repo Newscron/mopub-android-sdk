@@ -267,7 +267,6 @@ class HtmlWebViewClient extends WebViewClient {
 
     private boolean executeIntent(Context context, Intent intent, String errorMessage) {
         try {
-        	
         	final String intentAction = intent.getAction();
         	
         	if(TextUtils.isEmpty(intentAction)){
@@ -279,7 +278,6 @@ class HtmlWebViewClient extends WebViewClient {
         		.getInstance(context)
         		.sendBroadcast(intent);
         	}
-            
         } catch (Exception e) {
             Log.d("MoPub", (errorMessage != null)
                     ? errorMessage

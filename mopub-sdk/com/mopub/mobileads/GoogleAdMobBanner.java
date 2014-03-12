@@ -36,10 +36,16 @@ import android.app.Activity;
 import android.content.Context;
 import android.location.Location;
 import android.util.Log;
-import com.google.ads.*;
+import com.google.ads.Ad;
+import com.google.ads.AdListener;
+import com.google.ads.AdRequest;
 import com.google.ads.AdRequest.ErrorCode;
+import com.google.ads.AdSize;
+import com.google.ads.AdView;
 import com.mopub.mobileads.util.Views;
-import java.util.Map;
+
+import java.util.*;
+
 import static com.google.ads.AdSize.BANNER;
 import static com.google.ads.AdSize.IAB_BANNER;
 import static com.google.ads.AdSize.IAB_LEADERBOARD;
@@ -52,7 +58,6 @@ import static com.mopub.mobileads.MoPubErrorCode.NETWORK_NO_FILL;
  */
 
 class GoogleAdMobBanner extends CustomEventBanner implements AdListener {
-
     /*
      * These keys are intended for MoPub internal use. Do not modify.
      */
@@ -108,9 +113,6 @@ class GoogleAdMobBanner extends CustomEventBanner implements AdListener {
 
     @Override
     protected void onInvalidate() {
-    	if(mAdMobView == null){
-    		return ;
-    	}
         mAdMobView.setAdListener(null);
         Views.removeFromParent(mAdMobView);
         mAdMobView.destroy();
